@@ -1,0 +1,80 @@
+[project]
+name = "surreal-commands"
+version = "1.0.7"
+description = "A distributed task queue system similar to Celery, built with Python, SurrealDB, and LangChain"
+readme = "README.md"
+requires-python = ">=3.10.6"
+license = {text = "MIT"}
+authors = [
+    {name = "Surreal Commands Contributors"}
+]
+maintainers = [
+    {name = "Surreal Commands Contributors"}
+]
+dependencies = [
+    "humanize>=4.12.3",
+    "langchain-core>=0.3.68",
+    "langgraph>=0.5.1",
+    "loguru>=0.7.3",
+    "pydantic>=2.11.7",
+    "python-dotenv>=1.1.1",
+    "rich>=14.0.0",
+    "surrealdb>=1.0.4",
+    "typer>=0.16.0",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Distributed Computing",
+    "Topic :: System :: Networking",
+    "Topic :: Internet",
+    "Framework :: AsyncIO",
+    "Environment :: Console",
+    "Typing :: Typed",
+]
+keywords = ["task-queue", "distributed", "celery", "surrealdb", "langchain", "async"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "pytest-xdist>=3.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+test = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "pytest-xdist>=3.0.0",
+    "coverage>=7.0.0",
+]
+cli = [
+    "click>=8.0.0",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/lfnovo/surreal-commands"
+"Documentation" = "https://github.com/lfnovo/surreal-commands/blob/main/README.md"
+"Repository" = "https://github.com/lfnovo/surreal-commands"
+"Bug Tracker" = "https://github.com/lfnovo/surreal-commands/issues"
+
+[project.scripts]
+surreal-commands-worker = "surreal_commands.cli.worker:main"
+surreal-commands-dashboard = "surreal_commands.cli.dashboard:main"
+surreal-commands-logs = "surreal_commands.cli.logs:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
