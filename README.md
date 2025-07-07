@@ -4,14 +4,14 @@ A distributed task queue system similar to Celery, built with Python, SurrealDB,
 
 ## Features
 
-- =� **Real-time Processing**: Uses SurrealDB LIVE queries for instant command pickup
-- � **Concurrent Execution**: Configurable concurrent task execution with semaphore controls
-- =' **Type Safety**: Pydantic models for input/output validation
-- = **LangChain Integration**: Commands are LangChain Runnables for maximum flexibility
-- =� **Dynamic CLI**: Auto-generates CLI from registered commands
-- =� **Status Tracking**: Track command status through lifecycle (new � running � completed/failed)
-- = **Persistent Queue**: Commands persist in SurrealDB across worker restarts
-- =� **Comprehensive Logging**: Built-in logging with loguru
+- **Real-time Processing**: Uses SurrealDB LIVE queries for instant command pickup
+- **Concurrent Execution**: Configurable concurrent task execution with semaphore controls
+-  **Type Safety**: Pydantic models for input/output validation
+-  **LangChain Integration**: Commands are LangChain Runnables for maximum flexibility
+-  **Dynamic CLI**: Auto-generates CLI from registered commands
+- **Status Tracking**: Track command status through lifecycle (new � running � completed/failed)
+- **Persistent Queue**: Commands persist in SurrealDB across worker restarts
+- **Comprehensive Logging**: Built-in logging with loguru
 
 ## Architecture Overview
 
@@ -36,7 +36,7 @@ pip install surreal-commands
 Set up environment variables in `.env`:
 ```env
 # SurrealDB Configuration
-SURREAL_URL=ws://localhost:8018/rpc
+SURREAL_URL=ws://localhost:8000/rpc
 SURREAL_USER=root
 SURREAL_PASSWORD=root
 SURREAL_NAMESPACE=test
@@ -46,7 +46,7 @@ SURREAL_DATABASE=test
 4. Ensure SurrealDB is running:
 ```bash
 # Using Docker
-docker run --rm -p 8018:8018 surrealdb/surrealdb:latest start --user root --pass root
+docker run --rm -p 8000:8000 surrealdb/surrealdb:latest start --user root --pass root
 
 # Or install locally
 # See: https://surrealdb.com/install

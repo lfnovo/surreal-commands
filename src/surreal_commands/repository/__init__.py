@@ -38,7 +38,7 @@ def parse_record_id(value):
 async def db_connection(
     url=None, user=None, password=None, namespace=None, database=None
 ):
-    db = AsyncSurreal(url or "ws://localhost:8018/rpc")
+    db = AsyncSurreal(url or "ws://localhost:8000/rpc")
     await db.signin(
         {
             "username": user or os.environ["SURREAL_USER"],
@@ -59,7 +59,7 @@ async def db_connection(
 def sync_db_connection(
     url=None, user=None, password=None, namespace=None, database=None
 ):
-    db = Surreal(url or "http://localhost:8018")
+    db = Surreal(url or "http://localhost:8000")
     db.signin(
         {
             "username": user or os.environ["SURREAL_USER"],

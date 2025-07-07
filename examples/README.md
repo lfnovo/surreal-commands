@@ -194,7 +194,7 @@ Create a `.env` file with SurrealDB configuration:
 
 ```env
 # SurrealDB Configuration
-SURREAL_URL=ws://localhost:8018/rpc
+SURREAL_URL=ws://localhost:8000/rpc
 SURREAL_USER=root
 SURREAL_PASSWORD=root
 SURREAL_NAMESPACE=surreal_commands
