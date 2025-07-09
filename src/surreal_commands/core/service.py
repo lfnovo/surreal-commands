@@ -42,7 +42,7 @@ class CommandService:
     Handles submission, execution, and result management.
     """
 
-    def __init__(self, db_url: str = None):
+    def __init__(self, db_url: Optional[str] = None):
         surreal_url = (
             db_url
             or os.environ.get("SURREAL_URL")
