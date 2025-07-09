@@ -41,13 +41,15 @@ async def db_connection(
     db = AsyncSurreal(url or "ws://localhost:8000/rpc")
     await db.signin(
         {
-            "username": user or os.environ["SURREAL_USER"],
-            "password": password or os.environ["SURREAL_PASSWORD"],
+            "username": user or os.environ.get("SURREAL_USER", "test"),
+            "password": password
+            or os.environ.get("SURREAL_PASSWORD")
+            or os.environ.get("SURREAL_PASS", "test"),
         }
     )
     await db.use(
-        namespace or os.environ["SURREAL_NAMESPACE"],
-        database or os.environ["SURREAL_DATABASE"],
+        namespace or os.environ.get("SURREAL_NAMESPACE", "test"),
+        database or os.environ.get("SURREAL_DATABASE", "test"),
     )
     try:
         yield db
