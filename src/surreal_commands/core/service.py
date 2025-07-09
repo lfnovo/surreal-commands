@@ -43,10 +43,16 @@ class CommandService:
     """
 
     def __init__(self, db_url: str = None):
-        self.db_url = db_url or os.environ["SURREAL_URL"]
+        surreal_url = (
+            db_url
+            or os.environ.get("SURREAL_URL")
+            or f"ws://{os.environ.get('SURREAL_ADDRESS'):{os.environ.get('SURREAL_PORT') or 8000}}/rpc"
+        )
+        self.db_url = surreal_url
         self.db_auth = {
             "username": os.environ["SURREAL_USER"],
-            "password": os.environ["SURREAL_PASSWORD"],
+            "password": os.environ.get("SURREAL_PASSWORD")
+            or os.environ.get("SURREAL_PASS"),
         }
         self.db_namespace = os.environ["SURREAL_NAMESPACE"]
         self.db_database = os.environ["SURREAL_DATABASE"]
@@ -155,7 +161,11 @@ class CommandService:
             return command_id
 
     async def execute_command(
-        self, command_id: str, command_name: str, input_data: Dict[str, Any], user_context: Optional[Dict[str, Any]] = None
+        self,
+        command_id: str,
+        command_name: str,
+        input_data: Dict[str, Any],
+        user_context: Optional[Dict[str, Any]] = None,
     ) -> Any:
         """
         Execute a command by its name and input data.
@@ -194,7 +204,7 @@ class CommandService:
             execution_started_at=datetime.now(),
             app_name=app_name,
             command_name=cmd_name,
-            user_context=user_context
+            user_context=user_context,
         )
 
         # Ensure executor is initialized with all commands
@@ -208,7 +218,9 @@ class CommandService:
         formatted_result = None
         error_message = ""
         try:
-            result = await executor.execute_async(command_name, input_data, execution_context)
+            result = await executor.execute_async(
+                command_name, input_data, execution_context
+            )
             status = "completed"
             # Format result for storage
             formatted_result = None
@@ -246,5 +258,25 @@ class CommandService:
             )
 
 
-# Create a singleton instance for global use
-command_service = CommandService()
+# Create a lazy-initialized singleton instance for global use
+_command_service = None
+
+
+def get_command_service() -> CommandService:
+    """Get the global command service instance (lazy initialization)."""
+    global _command_service
+    if _command_service is None:
+        _command_service = CommandService()
+    return _command_service
+
+
+# For backward compatibility, create a property-like access
+class CommandServiceProxy:
+    def __getattr__(self, name):
+        return getattr(get_command_service(), name)
+
+    def __call__(self, *args, **kwargs):
+        return get_command_service()(*args, **kwargs)
+
+
+command_service = CommandServiceProxy()
