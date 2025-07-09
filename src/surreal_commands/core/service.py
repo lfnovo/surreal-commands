@@ -50,12 +50,12 @@ class CommandService:
         )
         self.db_url = surreal_url
         self.db_auth = {
-            "username": os.environ["SURREAL_USER"],
+            "username": os.environ.get("SURREAL_USER", "test"),
             "password": os.environ.get("SURREAL_PASSWORD")
-            or os.environ.get("SURREAL_PASS"),
+            or os.environ.get("SURREAL_PASS", "test"),
         }
-        self.db_namespace = os.environ["SURREAL_NAMESPACE"]
-        self.db_database = os.environ["SURREAL_DATABASE"]
+        self.db_namespace = os.environ.get("SURREAL_NAMESPACE", "test")
+        self.db_database = os.environ.get("SURREAL_DATABASE", "test")
         self._executor = None
 
     @property
