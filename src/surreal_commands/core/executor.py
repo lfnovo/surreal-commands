@@ -6,6 +6,7 @@ from typing import Any, AsyncIterator, Iterator, Optional
 from langchain_core.runnables import Runnable
 from langchain_core.runnables.utils import AddableDict
 from langgraph.graph.state import CompiledStateGraph
+from loguru import logger
 from pydantic import BaseModel
 
 from .types import ExecutionContext
@@ -15,9 +16,21 @@ class CommandExecutor:
     def __init__(self, command_dict: dict):
         """Initialize the CommandExecutor with a dictionary of commands."""
         self.command_dict = command_dict
+        self._context_aware_cache = {}  # Cache inspection results for performance
 
     def _command_accepts_execution_context(self, command: Runnable) -> bool:
         """Check if a command accepts execution_context parameter."""
+        # Use caching for performance
+        command_id = id(command)
+        if command_id in self._context_aware_cache:
+            return self._context_aware_cache[command_id]
+        
+        result = self._inspect_command_signature(command)
+        self._context_aware_cache[command_id] = result
+        return result
+    
+    def _inspect_command_signature(self, command: Runnable) -> bool:
+        """Inspect command signature to determine if it accepts execution_context."""
         try:
             # For RunnableLambda, we need to inspect the wrapped function
             if hasattr(command, 'func'):
@@ -29,22 +42,37 @@ class CommandExecutor:
             
             # For other runnables, we assume they don't accept execution_context
             return False
-        except Exception:
-            # If we can't inspect the signature, assume it doesn't accept execution_context
+        except (ValueError, TypeError) as e:
+            # Log specific errors for debugging
+            logger.debug(f"Failed to inspect command signature: {e}")
+            return False
+        except Exception as e:
+            # Catch any other unexpected errors
+            logger.warning(f"Unexpected error during signature inspection: {e}")
             return False
 
     def _prepare_command_args(self, command: Runnable, args: Any, execution_context: Optional[ExecutionContext] = None) -> Any:
         """Prepare arguments for command execution, potentially including execution_context."""
-        if execution_context and self._command_accepts_execution_context(command):
-            # If the command accepts execution_context, we need to pass it
-            # For LangChain runnables, we typically pass a dict with the execution_context
-            if isinstance(args, dict):
-                return {**args, 'execution_context': execution_context}
-            else:
-                # If args is not a dict, we can't easily inject execution_context
-                # This might happen with Pydantic models - we'll need to handle this differently
+        if not execution_context or not self._command_accepts_execution_context(command):
+            return args
+        
+        if isinstance(args, dict):
+            return {**args, 'execution_context': execution_context}
+        elif isinstance(args, BaseModel):
+            # For Pydantic models, check if they support execution_context
+            try:
+                # Try to add execution_context to the model's dict representation
+                args_dict = args.model_dump()
+                args_dict['execution_context'] = execution_context
+                return args_dict
+            except (TypeError, ValueError):
+                # Model doesn't support execution_context field
+                logger.debug(f"Cannot inject execution_context into Pydantic model {type(args)}")
                 return args
-        return args
+        else:
+            # For other argument types, we can't inject execution_context
+            logger.debug(f"Cannot inject execution_context into argument type {type(args)}")
+            return args
 
     @classmethod
     def parse_input(self, runnable, args) -> Any:
