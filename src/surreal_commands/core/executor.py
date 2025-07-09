@@ -32,11 +32,15 @@ class CommandExecutor:
     def _inspect_command_signature(self, command: Runnable) -> bool:
         """Inspect command signature to determine if it accepts execution_context."""
         try:
-            # For RunnableLambda, we need to inspect the wrapped function
+            # For RunnableLambda, check both sync (func) and async (afunc) functions
+            func = None
             if hasattr(command, "func"):
                 func = command.func
-                signature = inspect.signature(func)
+            elif hasattr(command, "afunc"):
+                func = command.afunc
 
+            if func:
+                signature = inspect.signature(func)
                 # Check if there's an execution_context parameter
                 return "execution_context" in signature.parameters
 
