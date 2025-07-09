@@ -16,16 +16,25 @@ class CommandExecutor:
     def __init__(self, command_dict: dict):
         """Initialize the CommandExecutor with a dictionary of commands."""
         self.command_dict = command_dict
-        self._context_aware_cache = {}  # Cache inspection results for performance
+        # Use a regular dict but with limited size to prevent memory leaks
+        self._context_aware_cache = {}
+        self._cache_max_size = 100  # Limit cache size
 
     def _command_accepts_execution_context(self, command: Runnable) -> bool:
         """Check if a command accepts execution_context parameter."""
-        # Use caching for performance
+        # Use caching for performance with size limits
         command_id = id(command)
         if command_id in self._context_aware_cache:
             return self._context_aware_cache[command_id]
 
         result = self._inspect_command_signature(command)
+        
+        # Limit cache size to prevent memory leaks
+        if len(self._context_aware_cache) >= self._cache_max_size:
+            # Remove oldest entries (simple FIFO)
+            oldest_key = next(iter(self._context_aware_cache))
+            del self._context_aware_cache[oldest_key]
+        
         self._context_aware_cache[command_id] = result
         return result
 
@@ -211,6 +220,28 @@ class CommandExecutor:
             raise exception
         return result
 
+    def _run_async_fallback(self, command: Runnable, prepared_args: Any) -> Any:
+        """
+        Run async command with proper event loop handling.
+        
+        Args:
+            command: The command to execute
+            prepared_args: Prepared arguments for the command
+            
+        Returns:
+            The result of the async command execution
+        """
+        async def run_async():
+            return await command.ainvoke(prepared_args)
+
+        try:
+            _ = asyncio.get_running_loop()
+            # If an event loop is running, use a separate thread
+            return self._run_async_in_thread(run_async())
+        except RuntimeError:
+            # No event loop running, use asyncio.run
+            return asyncio.run(run_async())
+
     def classify_command(self, command: Any) -> str:
         """
         Classify the type of command.
@@ -331,29 +362,12 @@ class CommandExecutor:
                 raise  # Re-raise unexpected TypeErrors
 
             # Fallback to async execution
-            async def run_async():
-                return await command.ainvoke(prepared_args)
-
-            try:
-                _ = asyncio.get_running_loop()
-                # If an event loop is running, use a separate thread
-                result = self._run_async_in_thread(run_async())
-            except RuntimeError:
-                # No event loop running, use asyncio.run
-                result = asyncio.run(run_async())
+            result = self._run_async_fallback(command, prepared_args)
             result = self._fix_return_type(return_class, result)
         except AttributeError:
             # Handle case where invoke doesn't exist, try async
             try:
-
-                async def run_async():
-                    return await command.ainvoke(prepared_args)
-
-                try:
-                    _ = asyncio.get_running_loop()
-                    result = self._run_async_in_thread(run_async())
-                except RuntimeError:
-                    result = asyncio.run(run_async())
+                result = self._run_async_fallback(command, prepared_args)
                 result = self._fix_return_type(return_class, result)
             except AttributeError:
                 raise ValueError(
