@@ -1,17 +1,78 @@
 import asyncio
+import inspect
 import threading
-from typing import Any, AsyncIterator, Iterator
+from typing import Any, AsyncIterator, Iterator, Optional
 
 from langchain_core.runnables import Runnable
 from langchain_core.runnables.utils import AddableDict
 from langgraph.graph.state import CompiledStateGraph
+from loguru import logger
 from pydantic import BaseModel
+
+from .types import ExecutionContext
 
 
 class CommandExecutor:
     def __init__(self, command_dict: dict):
         """Initialize the CommandExecutor with a dictionary of commands."""
         self.command_dict = command_dict
+        self._context_aware_cache = {}  # Cache inspection results for performance
+
+    def _command_accepts_execution_context(self, command: Runnable) -> bool:
+        """Check if a command accepts execution_context parameter."""
+        # Use caching for performance
+        command_id = id(command)
+        if command_id in self._context_aware_cache:
+            return self._context_aware_cache[command_id]
+        
+        result = self._inspect_command_signature(command)
+        self._context_aware_cache[command_id] = result
+        return result
+    
+    def _inspect_command_signature(self, command: Runnable) -> bool:
+        """Inspect command signature to determine if it accepts execution_context."""
+        try:
+            # For RunnableLambda, we need to inspect the wrapped function
+            if hasattr(command, 'func'):
+                func = command.func
+                signature = inspect.signature(func)
+                
+                # Check if there's an execution_context parameter
+                return 'execution_context' in signature.parameters
+            
+            # For other runnables, we assume they don't accept execution_context
+            return False
+        except (ValueError, TypeError) as e:
+            # Log specific errors for debugging
+            logger.debug(f"Failed to inspect command signature: {e}")
+            return False
+        except Exception as e:
+            # Catch any other unexpected errors
+            logger.warning(f"Unexpected error during signature inspection: {e}")
+            return False
+
+    def _prepare_command_args(self, command: Runnable, args: Any, execution_context: Optional[ExecutionContext] = None) -> Any:
+        """Prepare arguments for command execution, potentially including execution_context."""
+        if not execution_context or not self._command_accepts_execution_context(command):
+            return args
+        
+        if isinstance(args, dict):
+            return {**args, 'execution_context': execution_context}
+        elif isinstance(args, BaseModel):
+            # For Pydantic models, check if they support execution_context
+            try:
+                # Try to add execution_context to the model's dict representation
+                args_dict = args.model_dump()
+                args_dict['execution_context'] = execution_context
+                return args_dict
+            except (TypeError, ValueError):
+                # Model doesn't support execution_context field
+                logger.debug(f"Cannot inject execution_context into Pydantic model {type(args)}")
+                return args
+        else:
+            # For other argument types, we can't inject execution_context
+            logger.debug(f"Cannot inject execution_context into argument type {type(args)}")
+            return args
 
     @classmethod
     def parse_input(self, runnable, args) -> Any:
@@ -125,13 +186,14 @@ class CommandExecutor:
             return "runnable"
         return "other"
 
-    async def execute_async(self, command_name: str, args: Any) -> Any:
+    async def execute_async(self, command_name: str, args: Any, execution_context: Optional[ExecutionContext] = None) -> Any:
         """
         Execute a command asynchronously with a synchronous fallback.
 
         Args:
             command_name: The name of the command to execute.
             args: The arguments to pass to the command.
+            execution_context: Optional execution context to inject if command supports it.
 
         Returns:
             The result of the command execution.
@@ -142,11 +204,14 @@ class CommandExecutor:
         command: Runnable = self.command_dict[command_name]
         return_class = getattr(command, "get_output_schema", lambda: Any)()
 
+        # Prepare arguments with execution context if needed
+        prepared_args = self._prepare_command_args(command, args, execution_context)
+
         try:
-            result = await command.ainvoke(args)
+            result = await command.ainvoke(prepared_args)
         except (TypeError, AttributeError):
             try:
-                result = command.invoke(args)
+                result = command.invoke(prepared_args)
             except AttributeError:
                 raise ValueError(
                     f"Command {command_name} supports neither async nor sync execution"
@@ -154,13 +219,14 @@ class CommandExecutor:
 
         return self._fix_return_type(return_class, result)
 
-    def execute_sync(self, command_name: str, args: Any) -> Any:
+    def execute_sync(self, command_name: str, args: Any, execution_context: Optional[ExecutionContext] = None) -> Any:
         """
         Execute a command synchronously with an enhanced async fallback.
 
         Args:
             command_name: The name of the command to execute.
             args: The arguments to pass to the command.
+            execution_context: Optional execution context to inject if command supports it.
 
         Returns:
             The result of the command execution.
@@ -174,10 +240,13 @@ class CommandExecutor:
         
         # Parse input to correct format
         parsed_args = self.parse_input(command, args)
+        
+        # Prepare arguments with execution context if needed
+        prepared_args = self._prepare_command_args(command, parsed_args, execution_context)
 
         try:
             # Try synchronous execution first
-            result = command.invoke(parsed_args)
+            result = command.invoke(prepared_args)
             return self._fix_return_type(return_class, result)
         except TypeError as e:
             error_msg = str(e).lower()
@@ -188,7 +257,7 @@ class CommandExecutor:
 
             # Fallback to async execution
             async def run_async():
-                return await command.ainvoke(parsed_args)
+                return await command.ainvoke(prepared_args)
 
             try:
                 _ = asyncio.get_running_loop()
@@ -202,7 +271,7 @@ class CommandExecutor:
             # Handle case where invoke doesn't exist, try async
             try:
                 async def run_async():
-                    return await command.ainvoke(parsed_args)
+                    return await command.ainvoke(prepared_args)
 
                 try:
                     _ = asyncio.get_running_loop()
@@ -215,13 +284,14 @@ class CommandExecutor:
                     f"Command {command_name} supports neither sync nor async execution"
                 )
 
-    async def stream_async(self, command_name: str, args: Any) -> AsyncIterator:
+    async def stream_async(self, command_name: str, args: Any, execution_context: Optional[ExecutionContext] = None) -> AsyncIterator:
         """
         Stream results from a command asynchronously with fallbacks.
 
         Args:
             command_name: The name of the command to stream.
             args: The arguments to pass to the command.
+            execution_context: Optional execution context to inject if command supports it.
 
         Yields:
             The streamed chunks, properly typed.
@@ -229,24 +299,28 @@ class CommandExecutor:
         command: Runnable = self.command_dict[command_name]
         return_class = getattr(command, "get_output_schema", lambda: Any)()
 
+        # Prepare arguments with execution context if needed
+        prepared_args = self._prepare_command_args(command, args, execution_context)
+
         try:
-            async for chunk in command.astream(args):
+            async for chunk in command.astream(prepared_args):
                 yield self._fix_return_type(return_class, chunk)
         except (TypeError, AttributeError):
             try:
-                for chunk in command.stream(args):
+                for chunk in command.stream(prepared_args):
                     yield self._fix_return_type(return_class, chunk)
             except AttributeError:
-                result = await self.execute_async(command_name, args)
+                result = await self.execute_async(command_name, prepared_args, execution_context)
                 yield result
 
-    def stream_sync(self, command_name: str, args: Any) -> Iterator:
+    def stream_sync(self, command_name: str, args: Any, execution_context: Optional[ExecutionContext] = None) -> Iterator:
         """
         Stream results from a command synchronously with an async fallback.
 
         Args:
             command_name: The name of the command to stream.
             args: The arguments to pass to the command.
+            execution_context: Optional execution context to inject if command supports it.
 
         Returns:
             An iterator over the streamed chunks.
@@ -258,10 +332,13 @@ class CommandExecutor:
         command: Runnable = self.command_dict[command_name]
         return_class = getattr(command, "get_output_schema", lambda: Any)()
 
+        # Prepare arguments with execution context if needed
+        prepared_args = self._prepare_command_args(command, args, execution_context)
+
         def sync_stream_generator():
             try:
                 # Attempt synchronous streaming
-                for chunk in command.stream(args):
+                for chunk in command.stream(prepared_args):
                     yield self._fix_return_type(return_class, chunk)
             except (TypeError, AttributeError) as e:
                 # Check if the error is due to lack of synchronous support or missing stream method
@@ -271,7 +348,7 @@ class CommandExecutor:
                     async def collect_async_stream():
                         return [
                             chunk
-                            async for chunk in self.stream_async(command_name, args)
+                            async for chunk in self.stream_async(command_name, prepared_args, execution_context)
                         ]
 
                     # Run async code based on whether there's an active event loop
@@ -292,7 +369,7 @@ class CommandExecutor:
         except AttributeError:
             # Handle case where stream method doesn't exist at all
             async def collect_async_stream():
-                return [chunk async for chunk in self.stream_async(command_name, args)]
+                return [chunk async for chunk in self.stream_async(command_name, prepared_args, execution_context)]
 
             try:
                 _ = asyncio.get_running_loop()

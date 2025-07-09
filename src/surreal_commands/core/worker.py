@@ -85,10 +85,10 @@ def configure_logging(debug: bool = False):
         logger.info("Debug mode disabled - showing only INFO level and above")
 
 
-async def execute_command_with_semaphore(cmd_id, command_full_name, args, semaphore):
+async def execute_command_with_semaphore(cmd_id, command_full_name, args, user_context, semaphore):
     """Execute a command with semaphore control to limit concurrency."""
     async with semaphore:
-        await command_service.execute_command(cmd_id, command_full_name, args)
+        await command_service.execute_command(cmd_id, command_full_name, args, user_context)
 
 
 async def listen_for_commands(max_tasks: int) -> None:
@@ -131,6 +131,7 @@ async def listen_for_commands(max_tasks: int) -> None:
                                 cmd["id"],
                                 command_full_name,
                                 cmd["args"],
+                                cmd.get("context"),
                                 task_semaphore,
                             )
                         )
@@ -159,6 +160,7 @@ async def listen_for_commands(max_tasks: int) -> None:
                                 cmd["id"],
                                 command_full_name,
                                 cmd["args"],
+                                cmd.get("context"),
                                 task_semaphore,
                             )
                         )

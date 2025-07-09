@@ -3,6 +3,7 @@ Command Service for handling command lifecycle from submission to execution.
 """
 
 import os
+from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Union
 
 from dotenv import load_dotenv
@@ -12,6 +13,7 @@ from surrealdb import AsyncSurreal, Surreal
 
 from .executor import CommandExecutor
 from .registry import registry
+from .types import ExecutionContext
 
 load_dotenv()
 
@@ -40,14 +42,20 @@ class CommandService:
     Handles submission, execution, and result management.
     """
 
-    def __init__(self, db_url: str = None):
-        self.db_url = db_url or os.environ["SURREAL_URL"]
+    def __init__(self, db_url: Optional[str] = None):
+        surreal_url = (
+            db_url
+            or os.environ.get("SURREAL_URL")
+            or f"ws://{os.environ.get('SURREAL_ADDRESS', 'localhost'):{os.environ.get('SURREAL_PORT', 8000)}}/rpc"
+        )
+        self.db_url = surreal_url
         self.db_auth = {
-            "username": os.environ["SURREAL_USER"],
-            "password": os.environ["SURREAL_PASSWORD"],
+            "username": os.environ.get("SURREAL_USER", "test"),
+            "password": os.environ.get("SURREAL_PASSWORD")
+            or os.environ.get("SURREAL_PASS", "test"),
         }
-        self.db_namespace = os.environ["SURREAL_NAMESPACE"]
-        self.db_database = os.environ["SURREAL_DATABASE"]
+        self.db_namespace = os.environ.get("SURREAL_NAMESPACE", "test")
+        self.db_database = os.environ.get("SURREAL_DATABASE", "test")
         self._executor = None
 
     @property
@@ -153,7 +161,11 @@ class CommandService:
             return command_id
 
     async def execute_command(
-        self, command_id: str, command_name: str, input_data: Dict[str, Any]
+        self,
+        command_id: str,
+        command_name: str,
+        input_data: Dict[str, Any],
+        user_context: Optional[Dict[str, Any]] = None,
     ) -> Any:
         """
         Execute a command by its name and input data.
@@ -162,6 +174,7 @@ class CommandService:
             command_id: The ID of the command in the queue
             command_name: The full name of the command (app.command)
             input_data: The input data for the command
+            user_context: Optional user context from CLI
 
         Returns:
             The result of executing the command
@@ -184,6 +197,16 @@ class CommandService:
         # Parse input and execute
         input_data = CommandExecutor.parse_input(command, input_data)
 
+        # Create execution context
+        app_name, cmd_name = command_name.split(".", 1)
+        execution_context = ExecutionContext(
+            command_id=command_id,
+            execution_started_at=datetime.now(),
+            app_name=app_name,
+            command_name=cmd_name,
+            user_context=user_context,
+        )
+
         # Ensure executor is initialized with all commands
         executor = self.executor
         logger.debug(f"Executing command {command_name} with executor")
@@ -195,7 +218,9 @@ class CommandService:
         formatted_result = None
         error_message = ""
         try:
-            result = await executor.execute_async(command_name, input_data)
+            result = await executor.execute_async(
+                command_name, input_data, execution_context
+            )
             status = "completed"
             # Format result for storage
             formatted_result = None
@@ -233,5 +258,25 @@ class CommandService:
             )
 
 
-# Create a singleton instance for global use
-command_service = CommandService()
+# Create a lazy-initialized singleton instance for global use
+_command_service = None
+
+
+def get_command_service() -> CommandService:
+    """Get the global command service instance (lazy initialization)."""
+    global _command_service
+    if _command_service is None:
+        _command_service = CommandService()
+    return _command_service
+
+
+# For backward compatibility, create a property-like access
+class CommandServiceProxy:
+    def __getattr__(self, name):
+        return getattr(get_command_service(), name)
+
+    def __call__(self, *args, **kwargs):
+        return get_command_service()(*args, **kwargs)
+
+
+command_service = CommandServiceProxy()

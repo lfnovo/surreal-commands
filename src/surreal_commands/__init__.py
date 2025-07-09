@@ -3,7 +3,7 @@
 # Core functionality
 from .core.registry import registry
 from .core.service import CommandService, command_service
-from .core.types import CommandRegistryItem
+from .core.types import CommandRegistryItem, ExecutionContext
 
 # Decorator API
 from .decorators import command
@@ -49,6 +49,7 @@ __all__ = [
     
     # Advanced usage
     "CommandRegistryItem",
+    "ExecutionContext",
     "CommandExecutor",
     "db_connection",
 ]
