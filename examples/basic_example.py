@@ -1,5 +1,12 @@
 """
-Basic example showing command registration and execution
+Basic example showing command registration and execution.
+
+This example demonstrates:
+1. Basic command definition without execution context (backward compatible)
+2. Command registration using the @command decorator
+3. Submitting and monitoring commands
+
+This shows that existing commands continue to work without any changes.
 """
 
 from pydantic import BaseModel
@@ -16,7 +23,11 @@ class TextOutput(BaseModel):
 
 @command("process_text")
 def process_text(input_data: TextInput) -> TextOutput:
-    """Process text with optional uppercase conversion"""
+    """Process text with optional uppercase conversion.
+    
+    This is a simple command that doesn't need execution context.
+    It shows backward compatibility - existing commands work without changes.
+    """
     result = input_data.text.upper() if input_data.uppercase else input_data.text
     return TextOutput(
         result=result,

@@ -9,23 +9,32 @@ from langgraph.graph.state import CompiledStateGraph
 from loguru import logger
 from pydantic import BaseModel
 
-from .types import ExecutionContext
+from .types import ExecutionContext, CommandInput, CommandOutput
 
 
 class CommandExecutor:
     def __init__(self, command_dict: dict):
         """Initialize the CommandExecutor with a dictionary of commands."""
         self.command_dict = command_dict
-        self._context_aware_cache = {}  # Cache inspection results for performance
+        # Use a regular dict but with limited size to prevent memory leaks
+        self._context_aware_cache = {}
+        self._cache_max_size = 100  # Limit cache size
 
     def _command_accepts_execution_context(self, command: Runnable) -> bool:
         """Check if a command accepts execution_context parameter."""
-        # Use caching for performance
+        # Use caching for performance with size limits
         command_id = id(command)
         if command_id in self._context_aware_cache:
             return self._context_aware_cache[command_id]
 
         result = self._inspect_command_signature(command)
+        
+        # Limit cache size to prevent memory leaks
+        if len(self._context_aware_cache) >= self._cache_max_size:
+            # Remove oldest entries (simple FIFO)
+            oldest_key = next(iter(self._context_aware_cache))
+            del self._context_aware_cache[oldest_key]
+        
         self._context_aware_cache[command_id] = result
         return result
 
@@ -62,32 +71,39 @@ class CommandExecutor:
         execution_context: Optional[ExecutionContext] = None,
     ) -> Any:
         """Prepare arguments for command execution, potentially including execution_context."""
-        if not execution_context or not self._command_accepts_execution_context(
-            command
-        ):
+        if not execution_context:
             return args
 
-        if isinstance(args, dict):
-            return {**args, "execution_context": execution_context}
-        elif isinstance(args, BaseModel):
-            # For Pydantic models, check if they support execution_context
-            try:
-                # Try to add execution_context to the model's dict representation
-                args_dict = args.model_dump()
-                args_dict["execution_context"] = execution_context
-                return args_dict
-            except (TypeError, ValueError):
-                # Model doesn't support execution_context field
+        # If args is an instance of CommandInput, set the execution_context directly
+        if isinstance(args, CommandInput):
+            args.execution_context = execution_context
+            return args
+        
+        # For backward compatibility: if function explicitly accepts execution_context parameter
+        if self._command_accepts_execution_context(command):
+            if isinstance(args, dict):
+                return {**args, "execution_context": execution_context}
+            elif isinstance(args, BaseModel):
+                # For Pydantic models, check if they support execution_context
+                try:
+                    # Try to add execution_context to the model's dict representation
+                    args_dict = args.model_dump()
+                    args_dict["execution_context"] = execution_context
+                    return args_dict
+                except (TypeError, ValueError):
+                    # Model doesn't support execution_context field
+                    logger.debug(
+                        f"Cannot inject execution_context into Pydantic model {type(args)}"
+                    )
+                    return args
+            else:
+                # For other argument types, we can't inject execution_context
                 logger.debug(
-                    f"Cannot inject execution_context into Pydantic model {type(args)}"
+                    f"Cannot inject execution_context into argument type {type(args)}"
                 )
                 return args
-        else:
-            # For other argument types, we can't inject execution_context
-            logger.debug(
-                f"Cannot inject execution_context into argument type {type(args)}"
-            )
-            return args
+        
+        return args
 
     @classmethod
     def parse_input(self, runnable, args) -> Any:
@@ -106,6 +122,27 @@ class CommandExecutor:
                 return target_schema(**args.model_dump())
 
         return args
+
+    def _populate_command_output(
+        self, 
+        output: Any, 
+        execution_context: Optional[ExecutionContext] = None,
+        execution_time: Optional[float] = None
+    ) -> Any:
+        """Populate CommandOutput fields if the output inherits from CommandOutput."""
+        if isinstance(output, CommandOutput) and execution_context:
+            # Only set fields that are None (don't override user-set values)
+            if output.command_id is None:
+                output.command_id = str(execution_context.command_id)
+            if output.execution_time is None and execution_time is not None:
+                output.execution_time = execution_time
+            if output.execution_metadata is None:
+                output.execution_metadata = {
+                    "app_name": execution_context.app_name,
+                    "command_name": execution_context.command_name,
+                    "started_at": execution_context.execution_started_at.isoformat()
+                }
+        return output
 
     def _fix_return_type(self, return_class: Any, value: Any) -> Any:
         """
@@ -183,6 +220,28 @@ class CommandExecutor:
             raise exception
         return result
 
+    def _run_async_fallback(self, command: Runnable, prepared_args: Any) -> Any:
+        """
+        Run async command with proper event loop handling.
+        
+        Args:
+            command: The command to execute
+            prepared_args: Prepared arguments for the command
+            
+        Returns:
+            The result of the async command execution
+        """
+        async def run_async():
+            return await command.ainvoke(prepared_args)
+
+        try:
+            _ = asyncio.get_running_loop()
+            # If an event loop is running, use a separate thread
+            return self._run_async_in_thread(run_async())
+        except RuntimeError:
+            # No event loop running, use asyncio.run
+            return asyncio.run(run_async())
+
     def classify_command(self, command: Any) -> str:
         """
         Classify the type of command.
@@ -221,14 +280,37 @@ class CommandExecutor:
         Raises:
             ValueError: If the command supports neither async nor sync execution.
         """
+        import time
+        start_time = time.time()
+        
         command: Runnable = self.command_dict[command_name]
         return_class = getattr(command, "get_output_schema", lambda: Any)()
 
         # Prepare arguments with execution context if needed
         prepared_args = self._prepare_command_args(command, args, execution_context)
 
-        result = await command.ainvoke(prepared_args)
-        return self._fix_return_type(return_class, result)
+        try:
+            result = await command.ainvoke(prepared_args)
+        except TypeError as e:
+            # Fall back to sync execution if async is not supported
+            error_msg = str(e).lower()
+            if (
+                "async not supported" in error_msg
+                or "synchronous" in error_msg
+                or "ainvoke" in error_msg
+            ):
+                # Fallback to sync execution
+                result = command.invoke(prepared_args)
+            else:
+                raise  # Re-raise unexpected TypeErrors
+        
+        result = self._fix_return_type(return_class, result)
+        
+        # Calculate execution time and populate CommandOutput if applicable
+        execution_time = time.time() - start_time
+        result = self._populate_command_output(result, execution_context, execution_time)
+        
+        return result
 
     def execute_sync(
         self,
@@ -251,6 +333,9 @@ class CommandExecutor:
             ValueError: If the command has no valid implementation.
             TypeError: For unexpected type errors not related to missing sync implementation.
         """
+        import time
+        start_time = time.time()
+        
         command: Runnable = self.command_dict[command_name]
         return_class = getattr(command, "get_output_schema", lambda: Any)()
 
@@ -265,7 +350,7 @@ class CommandExecutor:
         try:
             # Try synchronous execution first
             result = command.invoke(prepared_args)
-            return self._fix_return_type(return_class, result)
+            result = self._fix_return_type(return_class, result)
         except TypeError as e:
             error_msg = str(e).lower()
             # Check for various async-related error messages from LangChain
@@ -277,34 +362,23 @@ class CommandExecutor:
                 raise  # Re-raise unexpected TypeErrors
 
             # Fallback to async execution
-            async def run_async():
-                return await command.ainvoke(prepared_args)
-
-            try:
-                _ = asyncio.get_running_loop()
-                # If an event loop is running, use a separate thread
-                result = self._run_async_in_thread(run_async())
-            except RuntimeError:
-                # No event loop running, use asyncio.run
-                result = asyncio.run(run_async())
-            return self._fix_return_type(return_class, result)
+            result = self._run_async_fallback(command, prepared_args)
+            result = self._fix_return_type(return_class, result)
         except AttributeError:
             # Handle case where invoke doesn't exist, try async
             try:
-
-                async def run_async():
-                    return await command.ainvoke(prepared_args)
-
-                try:
-                    _ = asyncio.get_running_loop()
-                    result = self._run_async_in_thread(run_async())
-                except RuntimeError:
-                    result = asyncio.run(run_async())
-                return self._fix_return_type(return_class, result)
+                result = self._run_async_fallback(command, prepared_args)
+                result = self._fix_return_type(return_class, result)
             except AttributeError:
                 raise ValueError(
                     f"Command {command_name} supports neither sync nor async execution"
                 )
+        
+        # Calculate execution time and populate CommandOutput if applicable
+        execution_time = time.time() - start_time
+        result = self._populate_command_output(result, execution_context, execution_time)
+        
+        return result
 
     async def stream_async(
         self,

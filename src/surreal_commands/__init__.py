@@ -3,7 +3,7 @@
 # Core functionality
 from .core.registry import registry
 from .core.service import CommandService, command_service
-from .core.types import CommandRegistryItem, ExecutionContext
+from .core.types import CommandRegistryItem, ExecutionContext, CommandInput, CommandOutput
 
 # Decorator API
 from .decorators import command
@@ -46,6 +46,10 @@ __all__ = [
     # Service instances
     "CommandService", 
     "command_service",
+    
+    # Base classes for commands
+    "CommandInput",
+    "CommandOutput",
     
     # Advanced usage
     "CommandRegistryItem",
