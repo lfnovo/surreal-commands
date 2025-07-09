@@ -219,14 +219,55 @@ async def async_process(input_data: MyInput) -> MyOutput:
 command = RunnableLambda(async_process)
 ```
 
-### Command Context
+### Execution Context
 
-Commands can access context passed via CLI:
+Commands can access execution metadata including the `command_id` by accepting an `execution_context` parameter:
 
 ```python
-def contextual_command(input_data: MyInput, context: dict) -> MyOutput:
-    user_id = context.get("user_id")
-    # Use context in processing
+from surreal_commands import command, ExecutionContext
+
+@command("process_with_context")
+def process_with_context(input_data: MyInput, execution_context: ExecutionContext) -> MyOutput:
+    # Access command_id and other execution metadata
+    command_id = execution_context.command_id
+    execution_time = execution_context.execution_started_at
+    app_name = execution_context.app_name
+    command_name = execution_context.command_name
+    
+    # Access user context from CLI if provided
+    user_context = execution_context.user_context or {}
+    user_id = user_context.get("user_id", "anonymous")
+    
+    # Use in processing
+    result = f"Processed by {user_id} in command {command_id}"
+    return MyOutput(result=result)
+
+# Alternative: Access via kwargs
+@command("process_with_kwargs")
+def process_with_kwargs(input_data: MyInput, **kwargs) -> MyOutput:
+    execution_context = kwargs.get("execution_context")
+    if execution_context:
+        command_id = execution_context.command_id
+        # Use command_id in processing
+    return MyOutput(result="processed")
+```
+
+**ExecutionContext Properties:**
+- `command_id`: Database ID of the command
+- `execution_started_at`: When execution began
+- `app_name`: Application name  
+- `command_name`: Command name
+- `user_context`: Optional CLI context (user_id, scope, etc.)
+
+### CLI Context vs Execution Context
+
+- **CLI Context**: User-provided data via `--user-id`, `--scope` flags
+- **Execution Context**: System-provided execution metadata including `command_id`
+
+```python
+# CLI context is available in execution_context.user_context
+user_id = execution_context.user_context.get("user_id")
+scope = execution_context.user_context.get("scope")
 ```
 
 ## Monitoring
