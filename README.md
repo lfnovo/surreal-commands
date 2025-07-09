@@ -219,56 +219,131 @@ async def async_process(input_data: MyInput) -> MyOutput:
 command = RunnableLambda(async_process)
 ```
 
-### Execution Context
+### Working with Execution Context
 
-Commands can access execution metadata including the `command_id` by accepting an `execution_context` parameter:
+Commands can access execution metadata (command_id, execution time, etc.) using the **CommandInput** and **CommandOutput** base classes. This is the recommended approach that works with all registration methods.
+
+#### Using CommandInput and CommandOutput
 
 ```python
-from surreal_commands import command, ExecutionContext
+from surreal_commands import command, CommandInput, CommandOutput, ExecutionContext
+
+# Input that can access execution context
+class ProcessInput(CommandInput):
+    message: str
+    uppercase: bool = False
+
+# Output that includes execution metadata
+class ProcessOutput(CommandOutput):
+    result: str
+    # command_id, execution_time, and execution_metadata are inherited
 
 @command("process_with_context")
-def process_with_context(input_data: MyInput, execution_context: ExecutionContext) -> MyOutput:
-    # Access command_id and other execution metadata
-    command_id = execution_context.command_id
-    execution_time = execution_context.execution_started_at
-    app_name = execution_context.app_name
-    command_name = execution_context.command_name
+def process_with_context(input_data: ProcessInput) -> ProcessOutput:
+    # Access execution context from input
+    ctx = input_data.execution_context
     
-    # Access user context from CLI if provided
-    user_context = execution_context.user_context or {}
-    user_id = user_context.get("user_id", "anonymous")
+    if ctx:
+        command_id = ctx.command_id
+        app_name = ctx.app_name
+        user_context = ctx.user_context or {}
+        user_id = user_context.get("user_id", "anonymous")
+    else:
+        command_id = "unknown"
+        user_id = "anonymous"
     
-    # Use in processing
-    result = f"Processed by {user_id} in command {command_id}"
-    return MyOutput(result=result)
-
-# Alternative: Access via kwargs
-@command("process_with_kwargs")
-def process_with_kwargs(input_data: MyInput, **kwargs) -> MyOutput:
-    execution_context = kwargs.get("execution_context")
-    if execution_context:
-        command_id = execution_context.command_id
-        # Use command_id in processing
-    return MyOutput(result="processed")
+    # Process the message
+    result = input_data.message.upper() if input_data.uppercase else input_data.message
+    result = f"Processed by {user_id}: {result}"
+    
+    # Return output - framework automatically populates:
+    # - command_id (from execution context)
+    # - execution_time (measured by framework)
+    # - execution_metadata (additional context info)
+    return ProcessOutput(result=result)
 ```
 
-**ExecutionContext Properties:**
+#### Benefits of the New Pattern
+
+- **Works with all registration methods** (decorator and direct registry.register())
+- **Type-safe** with full IDE support
+- **Automatic metadata population** in outputs
+- **Backward compatible** - existing commands continue to work
+- **Clean API** that aligns with LangChain's expectations
+
+#### Base Class Usage Options
+
+1. **CommandInput only**: Access execution context in your command
+2. **CommandOutput only**: Get automatic execution metadata in outputs
+3. **Both**: Full execution context support with automatic metadata
+4. **Neither**: Regular commands without execution context (backward compatible)
+
+```python
+# Option 1: Access context only
+class MyInput(CommandInput):
+    data: str
+
+@command("context_input_only")
+def my_command(input_data: MyInput) -> RegularOutput:
+    ctx = input_data.execution_context
+    # ... use context ...
+    return RegularOutput(result="done")
+
+# Option 2: Output metadata only
+class MyOutput(CommandOutput):
+    result: str
+
+@command("context_output_only")
+def my_command(input_data: RegularInput) -> MyOutput:
+    # ... process ...
+    return MyOutput(result="done")  # Gets auto-populated metadata
+
+# Option 3: Full context support
+class MyInput(CommandInput):
+    data: str
+
+class MyOutput(CommandOutput):
+    result: str
+
+@command("full_context")
+def my_command(input_data: MyInput) -> MyOutput:
+    # ... access context and get metadata ...
+```
+
+#### ExecutionContext Properties
+
 - `command_id`: Database ID of the command
 - `execution_started_at`: When execution began
 - `app_name`: Application name  
 - `command_name`: Command name
 - `user_context`: Optional CLI context (user_id, scope, etc.)
 
-### CLI Context vs Execution Context
+#### CommandOutput Auto-populated Fields
 
-- **CLI Context**: User-provided data via `--user-id`, `--scope` flags
-- **Execution Context**: System-provided execution metadata including `command_id`
+- `command_id`: Automatically set from execution context
+- `execution_time`: Measured execution time in seconds
+- `execution_metadata`: Additional execution information
+
+#### Migration from Old Pattern
+
+If you have commands using the old pattern with `execution_context` as a parameter:
 
 ```python
-# CLI context is available in execution_context.user_context
-user_id = execution_context.user_context.get("user_id")
-scope = execution_context.user_context.get("scope")
+# OLD (causes errors):
+def old_command(input_data: MyInput, execution_context: ExecutionContext):
+    command_id = execution_context.command_id
+    # ...
+
+# NEW (recommended):
+class MyInput(CommandInput):
+    # your fields here
+
+def new_command(input_data: MyInput):
+    command_id = input_data.execution_context.command_id if input_data.execution_context else None
+    # ...
 ```
+
+See `examples/migration_example.py` for detailed migration examples.
 
 ## Monitoring
 

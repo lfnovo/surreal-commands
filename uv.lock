@@ -1388,7 +1388,7 @@ wheels = [
 
 [[package]]
 name = "surreal-commands"
-version = "1.0.13"
+version = "1.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "humanize" },
