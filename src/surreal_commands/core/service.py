@@ -46,7 +46,7 @@ class CommandService:
         surreal_url = (
             db_url
             or os.environ.get("SURREAL_URL")
-            or f"ws://{os.environ.get('SURREAL_ADDRESS'):{os.environ.get('SURREAL_PORT') or 8000}}/rpc"
+            or f"ws://{os.environ.get('SURREAL_ADDRESS', 'localhost'):{os.environ.get('SURREAL_PORT', 8000)}}/rpc"
         )
         self.db_url = surreal_url
         self.db_auth = {
