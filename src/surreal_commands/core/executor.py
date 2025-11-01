@@ -5,7 +5,6 @@ from typing import Any, AsyncIterator, Iterator, Optional
 
 from langchain_core.runnables import Runnable
 from langchain_core.runnables.utils import AddableDict
-from langgraph.graph.state import CompiledStateGraph
 from loguru import logger
 from pydantic import BaseModel
 
@@ -241,24 +240,6 @@ class CommandExecutor:
         except RuntimeError:
             # No event loop running, use asyncio.run
             return asyncio.run(run_async())
-
-    def classify_command(self, command: Any) -> str:
-        """
-        Classify the type of command.
-
-        Args:
-            command: The command object to classify.
-
-        Returns:
-            str: The type of command ('graph', 'runnable', or 'other').
-        """
-        if isinstance(command, CompiledStateGraph):
-            return "graph"
-        elif isinstance(command, Runnable):
-            return "runnable"
-        elif isinstance(command, type) and issubclass(command, Runnable):
-            return "runnable"
-        return "other"
 
     async def execute_async(
         self,

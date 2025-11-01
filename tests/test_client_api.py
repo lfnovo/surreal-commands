@@ -1,7 +1,6 @@
 """Tests for client API functionality"""
 
 import pytest
-import asyncio
 from unittest.mock import Mock, patch, AsyncMock
 from surrealdb import RecordID
 
@@ -391,7 +390,7 @@ class TestRecordIdHandling:
         with patch('src.surreal_commands.repository.repo_query') as mock_query:
             mock_query.return_value = [sample_command_record]
             
-            result = await get_command_status("command:test123")
+            await get_command_status("command:test123")
             
             # Verify that string was converted to RecordID for query
             query_vars = mock_query.call_args[0][1]
@@ -406,7 +405,7 @@ class TestRecordIdHandling:
         with patch('src.surreal_commands.repository.repo_query') as mock_query:
             mock_query.return_value = [sample_command_record]
             
-            result = await get_command_status(record_id)
+            await get_command_status(record_id)
             
             # Verify that RecordID was passed through correctly
             query_vars = mock_query.call_args[0][1]

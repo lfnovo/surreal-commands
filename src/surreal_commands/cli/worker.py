@@ -1,6 +1,5 @@
 """Worker CLI entry point for surreal-commands-worker command"""
 
-import typer
 from ..core.worker import app as worker_app
 
 

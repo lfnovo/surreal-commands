@@ -15,15 +15,15 @@ def test_imports():
     
     try:
         # Test core imports
-        from src.surreal_commands import (
-            command, registry, submit_command, 
+        from src.surreal_commands import (  # noqa: F401
+            command, registry, submit_command,
             get_command_status_sync, wait_for_command_sync,
             CommandStatus, CommandResult
         )
         print("✅ Core API imports successful")
-        
+
         # Test advanced imports
-        from src.surreal_commands import (
+        from src.surreal_commands import (  # noqa: F401
             CommandService, command_service,
             CommandExecutor, db_connection
         )

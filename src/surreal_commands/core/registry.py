@@ -1,11 +1,14 @@
 """Registry for command management"""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, TYPE_CHECKING, Any
 
 from langchain_core.runnables import Runnable
 from loguru import logger
 
 from .types import CommandRegistryItem
+
+if TYPE_CHECKING:
+    pass
 
 
 class CommandRegistry:
@@ -32,8 +35,24 @@ class CommandRegistry:
             self._apps: Dict[str, Dict[str, Runnable]] = {}
             self._initialized = True
 
-    def register(self, app: str, name: str, command: Runnable) -> CommandRegistryItem:
-        """Register a command under an app namespace"""
+    def register(
+        self,
+        app: str,
+        name: str,
+        command: Runnable,
+        retry_config: Optional[Any] = None
+    ) -> CommandRegistryItem:
+        """Register a command under an app namespace
+
+        Args:
+            app: Application name
+            name: Command name
+            command: Runnable command
+            retry_config: Optional retry configuration for this command
+
+        Returns:
+            CommandRegistryItem with the registered command
+        """
         # Check if command is already registered to avoid duplicates
         for item in self._items:
             if item.app_id == app and item.name == name:
@@ -41,7 +60,12 @@ class CommandRegistry:
                 return item
 
         # Create new registry item
-        item = CommandRegistryItem(app_id=app, name=name, runnable=command)
+        item = CommandRegistryItem(
+            app_id=app,
+            name=name,
+            runnable=command,
+            retry_config=retry_config
+        )
         self._items.append(item)
 
         # Maintain backward compatibility

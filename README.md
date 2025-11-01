@@ -432,13 +432,131 @@ uv run python run_worker.py --debug
 4. Add tests if applicable
 5. Submit a pull request
 
+## Retry Logic
+
+Surreal Commands includes built-in retry logic using the tenacity library. Commands can be configured with automatic retry behavior for handling transient failures.
+
+### Basic Retry Configuration
+
+```python
+from surreal_commands import command
+
+# Simple retry with 3 attempts
+@command("process_data", retry={"max_attempts": 3, "wait_strategy": "fixed", "wait_time": 1})
+def process_data(input_data: MyInput) -> MyOutput:
+    # This command will retry up to 3 times with 1 second wait between attempts
+    return MyOutput(result="processed")
+```
+
+### Wait Strategies
+
+Choose the right wait strategy for your use case:
+
+```python
+# Fixed wait time (good for rate-limited APIs)
+@command("api_call", retry={"max_attempts": 3, "wait_strategy": "fixed", "wait_time": 2})
+def api_call(input_data: MyInput) -> MyOutput:
+    pass
+
+# Exponential backoff (recommended for network calls)
+@command("network_call", retry={
+    "max_attempts": 5,
+    "wait_strategy": "exponential",
+    "wait_min": 1,
+    "wait_max": 60,
+    "wait_multiplier": 2
+})
+def network_call(input_data: MyInput) -> MyOutput:
+    # Wait times: 1s, 2s, 4s, 8s, 16s (capped at 60s)
+    pass
+
+# Exponential with jitter (prevents thundering herd)
+@command("distributed_call", retry={"wait_strategy": "exponential_jitter"})
+def distributed_call(input_data: MyInput) -> MyOutput:
+    pass
+```
+
+### Exception Filtering
+
+Control which exceptions trigger retries:
+
+```python
+# Retry only on specific exceptions
+@command("selective_retry", retry={
+    "max_attempts": 3,
+    "retry_on": [ConnectionError, TimeoutError]
+})
+def selective_retry(input_data: MyInput) -> MyOutput:
+    pass
+
+# Don't retry on permanent errors
+@command("skip_permanent", retry={
+    "max_attempts": 3,
+    "stop_on": [ValueError, TypeError, KeyError]
+})
+def skip_permanent(input_data: MyInput) -> MyOutput:
+    pass
+```
+
+### Global Retry Configuration
+
+Set default retry behavior via environment variables:
+
+```env
+# Enable retries globally
+SURREAL_COMMANDS_RETRY_ENABLED=true
+SURREAL_COMMANDS_RETRY_MAX_ATTEMPTS=3
+SURREAL_COMMANDS_RETRY_WAIT_STRATEGY=exponential
+SURREAL_COMMANDS_RETRY_WAIT_MIN=1
+SURREAL_COMMANDS_RETRY_WAIT_MAX=60
+```
+
+Per-command configuration always overrides global defaults.
+
+### Disabling Retry
+
+```python
+# Explicitly disable retry for a command
+@command("no_retry", retry=None)
+def no_retry(input_data: MyInput) -> MyOutput:
+    # Fails immediately without retry
+    pass
+
+# Or use enabled flag
+@command("also_no_retry", retry={"enabled": False})
+def also_no_retry(input_data: MyInput) -> MyOutput:
+    pass
+```
+
+### Type-Safe Configuration
+
+Use `RetryConfig` for IDE autocomplete and validation:
+
+```python
+from surreal_commands import command, RetryConfig, RetryStrategy
+
+config = RetryConfig(
+    enabled=True,
+    max_attempts=5,
+    wait_strategy=RetryStrategy.EXPONENTIAL,
+    wait_min=1,
+    wait_max=60
+)
+
+@command("typed_retry", retry=config)
+def typed_retry(input_data: MyInput) -> MyOutput:
+    pass
+```
+
+See `examples/retry_examples.py` for more examples.
+
 ## Future Enhancements
 
 - [ ] Web dashboard for monitoring
 - [ ] Command scheduling (cron-like)
 - [ ] Priority queues
 - [ ] Result callbacks
-- [ ] Retry mechanisms
+- [x] Retry mechanisms (completed!)
 - [ ] Command chaining/workflows
 - [ ] Metrics and monitoring
 - [ ] REST API endpoint

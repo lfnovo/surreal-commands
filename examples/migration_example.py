@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import Optional
 from src.surreal_commands import (
     command, submit_command, wait_for_command_sync,
-    ExecutionContext, CommandInput, CommandOutput
+    CommandInput, CommandOutput
 )
 
 # ============================================================================
