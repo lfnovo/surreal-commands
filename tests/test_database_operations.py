@@ -1,6 +1,5 @@
 """Tests for database operations and repository functionality"""
 
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest

@@ -5,7 +5,7 @@ Advanced example showing async commands, error handling, and context
 import asyncio
 from typing import List, Optional
 from pydantic import BaseModel, Field
-from src.surreal_commands import command, submit_command, get_command_status, wait_for_command
+from src.surreal_commands import command, submit_command, get_command_status, wait_for_command, wait_for_command_sync
 
 class AnalysisInput(BaseModel):
     data: List[float]

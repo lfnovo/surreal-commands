@@ -3,7 +3,6 @@
 import pytest
 from unittest.mock import patch, Mock
 from pydantic import BaseModel
-from langchain_core.runnables import RunnableLambda
 
 from src.surreal_commands.decorators import command, _detect_app_name
 from src.surreal_commands.core.registry import CommandRegistry

@@ -14,6 +14,12 @@ from surrealdb import AsyncSurreal, Surreal
 from .executor import CommandExecutor
 from .registry import registry
 from .types import ExecutionContext
+from .retry import (
+    get_global_retry_config,
+    merge_retry_configs,
+    build_async_retry_instance,
+)
+from tenacity import RetryError
 
 load_dotenv()
 
@@ -211,16 +217,42 @@ class CommandService:
         executor = self.executor
         logger.debug(f"Executing command {command_name} with executor")
 
+        # Get retry configuration (per-command or global)
+        per_command_retry = registry_item.retry_config if registry_item else None
+        global_retry = get_global_retry_config()
+        retry_config = merge_retry_configs(global_retry, per_command_retry)
+
         await self.update_command_result(command_id, "running")
 
         result = None
         status = "completed"
         formatted_result = None
         error_message = ""
-        try:
-            result = await executor.execute_async(
+
+        # Define the execution function that will be retried
+        async def execute_with_retry():
+            return await executor.execute_async(
                 command_name, input_data, execution_context
             )
+
+        try:
+            # If retry is enabled, wrap execution in retry logic
+            if retry_config and retry_config.enabled:
+                logger.debug(
+                    f"Retry enabled for {command_name}: max_attempts={retry_config.max_attempts}, "
+                    f"strategy={retry_config.wait_strategy}"
+                )
+                retry_instance = build_async_retry_instance(retry_config)
+
+                # Execute with retry using context manager
+                async for attempt in retry_instance:
+                    with attempt:
+                        result = await execute_with_retry()
+            else:
+                # No retry - execute directly
+                logger.debug(f"Retry not enabled for {command_name}")
+                result = await execute_with_retry()
+
             status = "completed"
             # Format result for storage
             formatted_result = None
@@ -230,12 +262,24 @@ class CommandService:
                 formatted_result = {"output": str(result)}
             else:
                 formatted_result = result
+
+        except RetryError as e:
+            # All retry attempts exhausted - get the original exception
+            original_exception = e.last_attempt.exception()
+            logger.error(
+                f"Command {command_name} failed after all retry attempts: {original_exception}"
+            )
+            status = "failed"
+            error_message = str(original_exception)
+
         except Exception as e:
+            # Direct execution failed or retry not enabled
             logger.error(f"Error executing command {command_name}: {e}")
             status = "failed"
             error_message = str(e)
 
         # Update command status in queue
+        # Status remains "running" during retries and only changes to completed/failed at the end
         await self.update_command_result(
             command_id, status, formatted_result, error_message
         )

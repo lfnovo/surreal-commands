@@ -121,7 +121,7 @@ async def listen_for_commands(max_tasks: int) -> None:
                         console.rule(
                             f":stopwatch: [bold white]Processing existing command: [cyan]{cmd['app']}.[bold]{cmd['name']} [bold][magenta]{cmd['id']}"
                         )
-                        console.log(f"[underline]Arguments:")
+                        console.log("[underline]Arguments:")
                         console.log(JSON(json.dumps(cmd["args"])))
                         console.print()
 
@@ -150,7 +150,7 @@ async def listen_for_commands(max_tasks: int) -> None:
                         console.rule(
                             f":stopwatch: [bold white]Started command: [cyan]{cmd['app']}.[bold]{cmd['name']} [bold][magenta]{cmd['id']}"
                         )
-                        console.log(f"[underline]Arguments:")
+                        console.log("[underline]Arguments:")
                         console.log(JSON(json.dumps(cmd["args"])))
                         console.print()
 

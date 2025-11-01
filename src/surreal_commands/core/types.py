@@ -77,6 +77,10 @@ class CommandRegistryItem(BaseModel):
     app_id: str
     name: str
     runnable: Runnable
+    retry_config: Optional[Any] = Field(
+        default=None,
+        description="Retry configuration for this command"
+    )
 
     @property
     def input_schema(self) -> type[BaseModel]:
@@ -85,3 +89,15 @@ class CommandRegistryItem(BaseModel):
     @property
     def output_schema(self) -> type[BaseModel]:
         return self.runnable.get_output_schema()
+
+
+# Rebuild the model after RetryConfig is imported to support proper typing
+def _rebuild_registry_item_model():
+    """Rebuild CommandRegistryItem model after RetryConfig is available."""
+    try:
+        from .retry import RetryConfig
+        CommandRegistryItem.model_fields['retry_config'].annotation = Optional[RetryConfig]
+        CommandRegistryItem.model_rebuild()
+    except Exception:
+        # If retry module is not available, that's ok - retry_config will be Any
+        pass

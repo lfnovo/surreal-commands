@@ -1399,6 +1399,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "rich" },
     { name = "surrealdb" },
+    { name = "tenacity" },
     { name = "typer" },
 ]
 
@@ -1450,6 +1451,7 @@ requires-dist = [
     { name = "rich", specifier = ">=14.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
     { name = "surrealdb", specifier = ">=1.0.4" },
+    { name = "tenacity", specifier = ">=9.0.0" },
     { name = "typer", specifier = ">=0.16.0" },
 ]
 provides-extras = ["dev", "test", "cli"]

@@ -20,6 +20,7 @@ dependencies = [
     "python-dotenv>=1.1.1",
     "rich>=14.0.0",
     "surrealdb>=1.0.4",
+    "tenacity>=9.0.0",
     "typer>=0.16.0",
 ]
 classifiers = [

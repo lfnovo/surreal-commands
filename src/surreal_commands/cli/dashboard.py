@@ -1,9 +1,6 @@
 import asyncio
-import time
 
 import click
-from loguru import logger
-from pydantic import BaseModel
 from rich.live import Live
 from rich.table import Table
 
