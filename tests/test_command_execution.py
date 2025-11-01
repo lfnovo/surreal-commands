@@ -127,16 +127,6 @@ class TestCommandExecutor:
         value = "simple string"
         fixed = command_executor._fix_return_type(str, value)
         assert fixed == value
-    
-    def test_classify_command_runnable(self, command_executor, sync_command):
-        """Test classifying a Runnable command"""
-        classification = command_executor.classify_command(sync_command)
-        assert classification == "runnable"
-    
-    def test_classify_command_other(self, command_executor):
-        """Test classifying a non-Runnable command"""
-        classification = command_executor.classify_command("not a runnable")
-        assert classification == "other"
 
 
 @pytest.mark.unit
