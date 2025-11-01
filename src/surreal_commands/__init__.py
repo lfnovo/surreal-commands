@@ -63,6 +63,6 @@ __all__ = [
     "db_connection",
 ]
 
-# Rebuild CommandRegistryItem model now that RetryConfig is available
-from .core.types import _rebuild_registry_item_model
-_rebuild_registry_item_model()
+# Rebuild CommandRegistryItem model now that RetryConfig is imported
+# This resolves the forward reference "RetryConfig" to the actual class
+CommandRegistryItem.model_rebuild()

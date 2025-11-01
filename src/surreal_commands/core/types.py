@@ -1,9 +1,12 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from langchain_core.runnables import Runnable
 from pydantic import BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:
+    from .retry import RetryConfig
 
 
 @dataclass
@@ -77,7 +80,7 @@ class CommandRegistryItem(BaseModel):
     app_id: str
     name: str
     runnable: Runnable
-    retry_config: Optional[Any] = Field(
+    retry_config: Optional["RetryConfig"] = Field(
         default=None,
         description="Retry configuration for this command"
     )
@@ -89,15 +92,3 @@ class CommandRegistryItem(BaseModel):
     @property
     def output_schema(self) -> type[BaseModel]:
         return self.runnable.get_output_schema()
-
-
-# Rebuild the model after RetryConfig is imported to support proper typing
-def _rebuild_registry_item_model():
-    """Rebuild CommandRegistryItem model after RetryConfig is available."""
-    try:
-        from .retry import RetryConfig
-        CommandRegistryItem.model_fields['retry_config'].annotation = Optional[RetryConfig]
-        CommandRegistryItem.model_rebuild()
-    except Exception:
-        # If retry module is not available, that's ok - retry_config will be Any
-        pass

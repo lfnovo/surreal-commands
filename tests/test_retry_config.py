@@ -62,6 +62,19 @@ class TestRetryConfig:
         with pytest.raises(ValidationError):
             RetryConfig(max_attempts=0)
 
+    def test_invalid_wait_max_less_than_wait_min(self):
+        """Test validation for wait_max < wait_min."""
+        with pytest.raises(ValidationError) as exc_info:
+            RetryConfig(wait_min=10.0, wait_max=5.0)
+        assert "wait_max" in str(exc_info.value)
+        assert "wait_min" in str(exc_info.value)
+
+    def test_valid_wait_max_equals_wait_min(self):
+        """Test that wait_max == wait_min is valid."""
+        config = RetryConfig(wait_min=5.0, wait_max=5.0)
+        assert config.wait_min == 5.0
+        assert config.wait_max == 5.0
+
     def test_all_wait_strategies(self):
         """Test all wait strategies."""
         for strategy in RetryStrategy:

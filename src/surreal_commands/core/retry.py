@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Any, List, Optional, Type
 
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from tenacity import (
     AsyncRetrying,
     RetryCallState,
@@ -61,6 +61,15 @@ class RetryConfig(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
+
+    @model_validator(mode='after')
+    def validate_wait_times(self) -> 'RetryConfig':
+        """Validate that wait_max >= wait_min."""
+        if self.wait_max < self.wait_min:
+            raise ValueError(
+                f"wait_max ({self.wait_max}) must be greater than or equal to wait_min ({self.wait_min})"
+            )
+        return self
 
 
 def get_global_retry_config() -> Optional[RetryConfig]:
