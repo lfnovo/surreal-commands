@@ -498,6 +498,39 @@ def skip_permanent(input_data: MyInput) -> MyOutput:
     pass
 ```
 
+### Controlling Retry Log Verbosity
+
+Control the log level for retry attempt messages to reduce noise in high-concurrency scenarios:
+
+```python
+# Reduce logging for bulk operations with expected transient failures
+@command("bulk_embed", retry={
+    "max_attempts": 5,
+    "wait_strategy": "exponential",
+    "retry_log_level": "debug"  # Only show retries in debug mode
+})
+def bulk_embed(input_data: MyInput) -> MyOutput:
+    pass
+
+# Suppress all retry logs for high-volume background tasks
+@command("background_sync", retry={
+    "max_attempts": 3,
+    "retry_log_level": "none"  # No retry logging
+})
+def background_sync(input_data: MyInput) -> MyOutput:
+    pass
+
+# Use warning level for critical operations
+@command("critical_api_call", retry={
+    "max_attempts": 3,
+    "retry_log_level": "warning"  # Make retries more visible
+})
+def critical_api_call(input_data: MyInput) -> MyOutput:
+    pass
+```
+
+Available log levels: `"debug"`, `"info"` (default), `"warning"`, `"error"`, `"none"`
+
 ### Global Retry Configuration
 
 Set default retry behavior via environment variables:
@@ -509,6 +542,7 @@ SURREAL_COMMANDS_RETRY_MAX_ATTEMPTS=3
 SURREAL_COMMANDS_RETRY_WAIT_STRATEGY=exponential
 SURREAL_COMMANDS_RETRY_WAIT_MIN=1
 SURREAL_COMMANDS_RETRY_WAIT_MAX=60
+SURREAL_COMMANDS_RETRY_LOG_LEVEL=info
 ```
 
 Per-command configuration always overrides global defaults.
@@ -540,7 +574,8 @@ config = RetryConfig(
     max_attempts=5,
     wait_strategy=RetryStrategy.EXPONENTIAL,
     wait_min=1,
-    wait_max=60
+    wait_max=60,
+    retry_log_level="debug"  # Control log verbosity
 )
 
 @command("typed_retry", retry=config)

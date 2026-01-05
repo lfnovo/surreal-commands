@@ -188,6 +188,65 @@ def config_object_example(input_data: ProcessInput) -> ProcessOutput:
     )
 
 
+# Example 7: Bulk operation with reduced logging
+@command(
+    "bulk_operation",
+    app="examples",
+    retry={
+        "max_attempts": 5,
+        "wait_strategy": "exponential",
+        "retry_log_level": "debug",  # Reduce noise for bulk ops
+    },
+)
+def bulk_operation_example(input_data: ProcessInput) -> ProcessOutput:
+    """
+    Example: Bulk operation with DEBUG log level to reduce noise.
+    Useful when processing many items concurrently where transient failures
+    are expected and don't need to alarm users.
+    """
+    cmd_id = "bulk_operation"
+    attempt_counters[cmd_id] = attempt_counters.get(cmd_id, 0) + 1
+
+    if attempt_counters[cmd_id] < input_data.fail_count:
+        raise RuntimeError(
+            f"Transient failure on attempt {attempt_counters[cmd_id]}"
+        )
+
+    return ProcessOutput(
+        result=f"Bulk processed: {input_data.message}",
+        attempts=attempt_counters[cmd_id],
+    )
+
+
+# Example 8: Silent retry for background tasks
+@command(
+    "silent_background_task",
+    app="examples",
+    retry={
+        "max_attempts": 3,
+        "wait_strategy": "exponential",
+        "retry_log_level": "none",  # Suppress all retry logs
+    },
+)
+def silent_background_task_example(input_data: ProcessInput) -> ProcessOutput:
+    """
+    Example: Background task with no retry logging.
+    Useful for high-volume operations where retry logs would flood the output.
+    """
+    cmd_id = "silent_background"
+    attempt_counters[cmd_id] = attempt_counters.get(cmd_id, 0) + 1
+
+    if attempt_counters[cmd_id] < input_data.fail_count:
+        raise RuntimeError(
+            f"Silent failure on attempt {attempt_counters[cmd_id]}"
+        )
+
+    return ProcessOutput(
+        result=f"Silently processed: {input_data.message}",
+        attempts=attempt_counters[cmd_id],
+    )
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("Surreal Commands - Retry Examples")
@@ -203,6 +262,8 @@ if __name__ == "__main__":
     print("4. avoid_permanent_errors - Skip retrying permanent errors")
     print("5. no_retry - Explicitly disable retries")
     print("6. config_object - Using RetryConfig for type safety")
+    print("7. bulk_operation - DEBUG log level for bulk operations")
+    print("8. silent_background_task - NONE log level to suppress logs")
     print()
     print("To use these examples:")
     print("1. Start SurrealDB: docker run -p 8000:8000 surrealdb/surrealdb:latest start")

@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from src.surreal_commands.core.retry import (
     RetryConfig,
+    RetryLogLevel,
     RetryStrategy,
     get_global_retry_config,
     merge_retry_configs,
@@ -26,6 +27,7 @@ class TestRetryConfig:
         assert config.wait_multiplier == 2.0
         assert config.retry_on is None
         assert config.stop_on is None
+        assert config.retry_log_level == RetryLogLevel.INFO
 
     def test_custom_config(self):
         """Test custom retry configuration."""
@@ -80,6 +82,42 @@ class TestRetryConfig:
         for strategy in RetryStrategy:
             config = RetryConfig(wait_strategy=strategy)
             assert config.wait_strategy == strategy
+
+    def test_default_retry_log_level(self):
+        """Test default retry log level is INFO."""
+        config = RetryConfig()
+        assert config.retry_log_level == RetryLogLevel.INFO
+
+    def test_custom_retry_log_level(self):
+        """Test custom retry log level."""
+        config = RetryConfig(retry_log_level=RetryLogLevel.DEBUG)
+        assert config.retry_log_level == RetryLogLevel.DEBUG
+
+        config = RetryConfig(retry_log_level=RetryLogLevel.WARNING)
+        assert config.retry_log_level == RetryLogLevel.WARNING
+
+        config = RetryConfig(retry_log_level=RetryLogLevel.ERROR)
+        assert config.retry_log_level == RetryLogLevel.ERROR
+
+        config = RetryConfig(retry_log_level=RetryLogLevel.NONE)
+        assert config.retry_log_level == RetryLogLevel.NONE
+
+    def test_retry_log_level_from_string(self):
+        """Test creating RetryConfig with string log level."""
+        config = RetryConfig(retry_log_level="debug")
+        assert config.retry_log_level == RetryLogLevel.DEBUG
+
+        config = RetryConfig(retry_log_level="warning")
+        assert config.retry_log_level == RetryLogLevel.WARNING
+
+        config = RetryConfig(retry_log_level="none")
+        assert config.retry_log_level == RetryLogLevel.NONE
+
+    def test_all_retry_log_levels(self):
+        """Test all retry log levels."""
+        for log_level in RetryLogLevel:
+            config = RetryConfig(retry_log_level=log_level)
+            assert config.retry_log_level == log_level
 
 
 class TestGlobalRetryConfig:
@@ -136,6 +174,31 @@ class TestGlobalRetryConfig:
         assert config.wait_min == 0.5
         assert config.wait_max == 30.0
         assert config.wait_multiplier == 3.0
+
+    def test_env_var_retry_log_level(self, monkeypatch):
+        """Test retry log level from environment variable."""
+        monkeypatch.setenv("SURREAL_COMMANDS_RETRY_ENABLED", "true")
+        monkeypatch.setenv("SURREAL_COMMANDS_RETRY_LOG_LEVEL", "debug")
+        config = get_global_retry_config()
+        assert config.retry_log_level == RetryLogLevel.DEBUG
+
+        monkeypatch.setenv("SURREAL_COMMANDS_RETRY_LOG_LEVEL", "warning")
+        config = get_global_retry_config()
+        assert config.retry_log_level == RetryLogLevel.WARNING
+
+        monkeypatch.setenv("SURREAL_COMMANDS_RETRY_LOG_LEVEL", "none")
+        config = get_global_retry_config()
+        assert config.retry_log_level == RetryLogLevel.NONE
+
+    def test_env_var_invalid_retry_log_level(self, monkeypatch):
+        """Test warning on invalid retry log level from environment."""
+        monkeypatch.setenv("SURREAL_COMMANDS_RETRY_ENABLED", "true")
+        monkeypatch.setenv("SURREAL_COMMANDS_RETRY_LOG_LEVEL", "invalid_level")
+
+        config = get_global_retry_config()
+        # Should still return config with default log level
+        assert config is not None
+        assert config.retry_log_level == RetryLogLevel.INFO
 
 
 class TestMergeRetryConfigs:

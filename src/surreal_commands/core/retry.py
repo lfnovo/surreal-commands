@@ -28,6 +28,16 @@ class RetryStrategy(str, Enum):
     EXPONENTIAL_JITTER = "exponential_jitter"
 
 
+class RetryLogLevel(str, Enum):
+    """Log level for retry attempts."""
+
+    DEBUG = "debug"
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+    NONE = "none"
+
+
 class RetryConfig(BaseModel):
     """Configuration for command retry behavior.
 
@@ -41,6 +51,7 @@ class RetryConfig(BaseModel):
         wait_multiplier: Multiplier for exponential backoff (for EXPONENTIAL)
         retry_on: List of exception types that should trigger retries (inclusion list)
         stop_on: List of exception types that should NOT trigger retries (exclusion list)
+        retry_log_level: Log level for retry attempt messages (debug, info, warning, error, none)
     """
 
     enabled: bool = Field(default=True, description="Whether retry is enabled")
@@ -57,6 +68,9 @@ class RetryConfig(BaseModel):
     )
     stop_on: Optional[List[Type[Exception]]] = Field(
         default=None, description="Exception types that should NOT trigger retries"
+    )
+    retry_log_level: RetryLogLevel = Field(
+        default=RetryLogLevel.INFO, description="Log level for retry attempt messages"
     )
 
     class Config:
@@ -83,6 +97,7 @@ def get_global_retry_config() -> Optional[RetryConfig]:
         SURREAL_COMMANDS_RETRY_WAIT_MIN: Minimum wait time in seconds (default: 1)
         SURREAL_COMMANDS_RETRY_WAIT_MAX: Maximum wait time in seconds (default: 60)
         SURREAL_COMMANDS_RETRY_WAIT_MULTIPLIER: Exponential backoff multiplier (default: 2)
+        SURREAL_COMMANDS_RETRY_LOG_LEVEL: Log level for retry messages (default: info)
 
     Returns:
         RetryConfig if any retry environment variables are set and enabled is True,
@@ -131,6 +146,12 @@ def get_global_retry_config() -> Optional[RetryConfig]:
             config_dict["wait_multiplier"] = float(wait_multiplier)
         except ValueError:
             logger.warning(f"Invalid SURREAL_COMMANDS_RETRY_WAIT_MULTIPLIER: {wait_multiplier}")
+
+    if log_level := os.environ.get("SURREAL_COMMANDS_RETRY_LOG_LEVEL"):
+        try:
+            config_dict["retry_log_level"] = RetryLogLevel(log_level.lower())
+        except ValueError:
+            logger.warning(f"Invalid SURREAL_COMMANDS_RETRY_LOG_LEVEL: {log_level}")
 
     return RetryConfig(**config_dict)
 
@@ -223,8 +244,59 @@ def _build_retry_condition(config: RetryConfig):
     return combined_condition
 
 
+def create_before_sleep_callback(log_level: RetryLogLevel):
+    """Create a callback function for logging retry attempts at the specified level.
+
+    Args:
+        log_level: The log level to use for retry messages
+
+    Returns:
+        Callback function with signature (RetryCallState) -> None
+    """
+    def callback(retry_state: RetryCallState) -> None:
+        """Log retry attempt at the configured level."""
+        # Skip logging if level is NONE
+        if log_level == RetryLogLevel.NONE:
+            return
+
+        attempt_num = retry_state.attempt_number
+        if retry_state.outcome and retry_state.outcome.failed:
+            exception = retry_state.outcome.exception()
+            exception_type = type(exception).__name__
+            exception_msg = str(exception)
+        else:
+            exception_type = "Unknown"
+            exception_msg = "Unknown error"
+
+        # Calculate next wait time
+        next_wait = 0.0
+        if retry_state.next_action and retry_state.next_action.sleep:
+            next_wait = retry_state.next_action.sleep
+
+        # Build log message
+        message = (
+            f"[Retry] Attempt {attempt_num} failed with {exception_type}: {exception_msg}, "
+            f"waiting {next_wait:.1f}s before retry {attempt_num + 1}"
+        )
+
+        # Log at the appropriate level
+        if log_level == RetryLogLevel.DEBUG:
+            logger.debug(message)
+        elif log_level == RetryLogLevel.INFO:
+            logger.info(message)
+        elif log_level == RetryLogLevel.WARNING:
+            logger.warning(message)
+        elif log_level == RetryLogLevel.ERROR:
+            logger.error(message)
+
+    return callback
+
+
 def before_sleep_log(retry_state: RetryCallState) -> None:
     """Callback function to log retry attempts.
+
+    This function is kept for backward compatibility and uses INFO level
+    for the first attempt and DEBUG for subsequent attempts.
 
     Args:
         retry_state: Tenacity retry state containing attempt information
@@ -268,7 +340,7 @@ def build_async_retry_instance(config: RetryConfig) -> AsyncRetrying:
     kwargs = {
         "stop": stop_after_attempt(config.max_attempts),
         "wait": _build_wait_strategy(config),
-        "before_sleep": before_sleep_log,
+        "before_sleep": create_before_sleep_callback(config.retry_log_level),
         "reraise": True,  # Re-raise the original exception after all attempts exhausted
     }
 
@@ -292,7 +364,7 @@ def build_retry_instance(config: RetryConfig) -> Retrying:
     kwargs = {
         "stop": stop_after_attempt(config.max_attempts),
         "wait": _build_wait_strategy(config),
-        "before_sleep": before_sleep_log,
+        "before_sleep": create_before_sleep_callback(config.retry_log_level),
         "reraise": True,  # Re-raise the original exception after all attempts exhausted
     }
 
