@@ -4,7 +4,7 @@
 from .core.registry import registry
 from .core.service import CommandService, command_service
 from .core.types import CommandRegistryItem, ExecutionContext, CommandInput, CommandOutput
-from .core.retry import RetryConfig, RetryStrategy
+from .core.retry import RetryConfig, RetryStrategy, RetryLogLevel
 
 # Decorator API
 from .decorators import command
@@ -55,6 +55,7 @@ __all__ = [
     # Retry configuration
     "RetryConfig",
     "RetryStrategy",
+    "RetryLogLevel",
 
     # Advanced usage
     "CommandRegistryItem",

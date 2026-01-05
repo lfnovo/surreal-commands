@@ -69,13 +69,19 @@ Worker (LIVE query on command table)
 ## Retry Configuration
 
 ```python
-# Per-command
-@command("name", retry={"max_attempts": 3, "wait_strategy": "exponential"})
+# Per-command with log level control
+@command("name", retry={
+    "max_attempts": 3,
+    "wait_strategy": "exponential",
+    "retry_log_level": "debug"  # Control retry log verbosity
+})
 
 # Global (env vars)
 SURREAL_COMMANDS_RETRY_ENABLED=true
 SURREAL_COMMANDS_RETRY_MAX_ATTEMPTS=3
 SURREAL_COMMANDS_RETRY_WAIT_STRATEGY=exponential
+SURREAL_COMMANDS_RETRY_LOG_LEVEL=info
 
 # Strategies: fixed, exponential, random, exponential_jitter
+# Log Levels: debug, info (default), warning, error, none
 ```
