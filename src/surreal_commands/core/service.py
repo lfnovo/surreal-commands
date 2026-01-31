@@ -235,6 +235,9 @@ class CommandService:
                 command_name, input_data, execution_context
             )
 
+        # Track attempt number for logging
+        attempt_count = 0
+
         try:
             # If retry is enabled, wrap execution in retry logic
             if retry_config and retry_config.enabled:
@@ -246,10 +249,12 @@ class CommandService:
 
                 # Execute with retry using context manager
                 async for attempt in retry_instance:
+                    attempt_count += 1
                     with attempt:
                         result = await execute_with_retry()
             else:
                 # No retry - execute directly
+                attempt_count = 1
                 logger.debug(f"Retry not enabled for {command_name}")
                 result = await execute_with_retry()
 
@@ -264,17 +269,22 @@ class CommandService:
                 formatted_result = result
 
         except RetryError as e:
-            # All retry attempts exhausted - get the original exception
+            # All retry attempts exhausted (only happens if reraise=False)
             original_exception = e.last_attempt.exception()
             logger.error(
-                f"Command {command_name} failed after all retry attempts: {original_exception}"
+                f"Command {command_name} ({command_id}) failed after {attempt_count} attempt(s): {original_exception}"
             )
             status = "failed"
             error_message = str(original_exception)
 
         except Exception as e:
-            # Direct execution failed or retry not enabled
-            logger.error(f"Error executing command {command_name}: {e}")
+            # Command failed - either after retries exhausted (reraise=True) or no retry configured
+            if attempt_count > 1:
+                logger.error(
+                    f"Command {command_name} ({command_id}) failed after {attempt_count} attempt(s): {e}"
+                )
+            else:
+                logger.error(f"Error executing command {command_name} ({command_id}): {e}")
             status = "failed"
             error_message = str(e)
 

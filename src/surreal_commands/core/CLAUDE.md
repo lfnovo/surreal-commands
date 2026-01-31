@@ -32,7 +32,7 @@ Command execution engine - registry, service, executor, worker, client API, and 
 - **Registry is memory-only**: Commands must be imported before worker starts (use `--import-modules`)
 - **Executor caching**: Signature inspection cached per command object ID - 100 entry limit
 - **Async fallback**: `execute_sync()` runs async commands in new thread with fresh event loop
-- **RetryError**: On exhausted retries, `tenacity.RetryError` raised with `.last_attempt.exception()` for original error
+- **Retry with reraise=True**: On exhausted retries, the original exception is re-raised (not wrapped in `RetryError`). Error logs include attempt count: `"Command {name} ({id}) failed after {n} attempt(s): {error}"`
 - **Forward reference**: `CommandRegistryItem.model_rebuild()` called in root `__init__.py` to resolve `RetryConfig` type
 
 ## When Adding Code
