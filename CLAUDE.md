@@ -21,7 +21,7 @@ src/surreal_commands/
 
 ## Package-Level Files
 
-- **`__init__.py`**: Re-exports public API (`command`, `registry`, `submit_command`, `wait_for_command`, `CommandInput`, `CommandOutput`, `RetryConfig`)
+- **`__init__.py`**: Re-exports public API (`command`, `registry`, `submit_command`, `wait_for_command`, `CommandInput`, `CommandOutput`, `RetryConfig`, `RetryStrategy`, `RetryLogLevel`)
 - **`decorators.py`**: `@command(name, app, retry)` decorator - wraps functions in `RunnableLambda`, registers to global `registry`
 
 ## Environment Variables

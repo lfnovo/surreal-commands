@@ -567,7 +567,7 @@ def also_no_retry(input_data: MyInput) -> MyOutput:
 Use `RetryConfig` for IDE autocomplete and validation:
 
 ```python
-from surreal_commands import command, RetryConfig, RetryStrategy
+from surreal_commands import command, RetryConfig, RetryStrategy, RetryLogLevel
 
 config = RetryConfig(
     enabled=True,
@@ -575,7 +575,7 @@ config = RetryConfig(
     wait_strategy=RetryStrategy.EXPONENTIAL,
     wait_min=1,
     wait_max=60,
-    retry_log_level="debug"  # Control log verbosity
+    retry_log_level=RetryLogLevel.DEBUG  # Control log verbosity
 )
 
 @command("typed_retry", retry=config)
